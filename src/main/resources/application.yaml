@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: specification-demo
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    # FIXME
+    url: jdbc:postgresql://postgresql:5432/specification_demo+
+    username: postgres
+    password: postgres
+  jpa:
+    open-in-view: false
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 50
+
+
