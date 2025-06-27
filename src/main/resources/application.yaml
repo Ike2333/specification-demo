@@ -1,21 +1,28 @@
+server:
+  port: 8080
 spring:
   application:
     name: specification-demo
   datasource:
-    driver-class-name: org.postgresql.Driver
-    # FIXME
-    url: jdbc:postgresql://postgresql:5432/specification_demo+
-    username: postgres
-    password: postgres
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:specification_demo
+    username: sa
+#    driver-class-name: org.postgresql.Driver
+#    url: jdbc:postgresql://postgresql:5432/specification_demo
+#    username: postgres
+#    password: postgres
   jpa:
     open-in-view: false
     show-sql: true
     hibernate:
       ddl-auto: update
     properties:
-      hibernate:
-        format_sql: true
-        jdbc:
-          batch_size: 50
+      hibernate.jdbc.batch_size: 50
+
+# h2db通常只适用于快速模拟测试, 你可以删除h2相关配置, 直接使用pgsql(或其他关系型数据库)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console   # http://localhost:8080/h2-console
 
 

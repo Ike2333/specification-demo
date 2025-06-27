@@ -14,14 +14,17 @@ import jakarta.persistence.*
     ]
 )
 @SequenceGenerator(name = "user_seq")
-class UserEntity:BaseEntity() {
+class UserEntity : BaseEntity() {
     @Column(updatable = false, length = 32, unique = true)
-    var username:String? = null
-    @Column(length = 64)
-    var password:String? = null
-    var email:String? = null
+    var username: String? = null
 
-    @JoinTable(name = "cust_user_role",
+    @Column(length = 64)
+    var password: String? = null
+
+    var email: String? = null
+
+    @JoinTable(
+        name = "cust_user_role",
         joinColumns = [JoinColumn(name = "user_id")],
         inverseJoinColumns = [JoinColumn(name = "role_id")]
     )
