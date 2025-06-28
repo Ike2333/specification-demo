@@ -33,3 +33,9 @@ data class SimpleUserDTO(
     val createdAt: Instant?,
     val updatedAt: Instant?,
 )
+
+data class SimplerUserDTO(
+    val id: Long?,
+    val username: String?,
+    val email: String?,
+)

@@ -34,4 +34,14 @@ class CommonController(
     fun complexQueryOpt(): Any{
         return commonService.complexQueryOptimized()
     }
+
+    @GetMapping("/ssq")
+    fun simpleSpecQuery(): Any{
+        return commonService.simpleSpecQuery()
+    }
+
+    @GetMapping("/ssqo")
+    fun simpleSpecQueryOptimized(): Any{
+        return commonService.simpleSpecQueryOptimized()
+    }
 }

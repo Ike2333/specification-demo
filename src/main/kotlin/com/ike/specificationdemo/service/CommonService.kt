@@ -7,6 +7,10 @@ import com.ike.specificationdemo.repository.*
 import jakarta.persistence.EntityManager
 import jakarta.persistence.criteria.JoinType
 import jakarta.persistence.criteria.Predicate
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
+import org.springframework.data.domain.Sort
 import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -35,7 +39,7 @@ class CommonService(
         * 观察console可以看到hibernate生成的sql可以看出此时已经是最优解了
         */
         return userRepository.findSimpleUserProjectionBy()
-            // 同样可以将返回值映射为 List<SimpleUserDTO>
+            // 也可以像这样将返回值映射为 List<SimpleUserDTO>
             .map {
                 SimpleUserDTO(
                     it.getId(),
@@ -52,7 +56,7 @@ class CommonService(
         /*
          * 假设这次需要根据传入的角色名和权限名动态查询关联的用户
          */
-        val (roleNameMock, permissionNameMock) = pair()
+        val (roleNameMock, permissionNameMock) = genKeywordsPair()
 
         val spec = Specification<UserEntity> { root, _, cb ->
             val userRoleJoin = root.join<UserEntity, RoleEntity>("roles", JoinType.LEFT)
@@ -93,7 +97,7 @@ class CommonService(
         /*
          * 假设这次需要根据传入的角色名和权限名动态查询关联的用户
          */
-        val (roleNameMock, permissionNameMock) = pair()
+        val (roleNameMock, permissionNameMock) = genKeywordsPair()
 
         val cb = entityManager.criteriaBuilder
         val cq = cb.createQuery(UserFlatDTO::class.java)
@@ -129,7 +133,6 @@ class CommonService(
          * where r1_1.name like ? escape '' and p1_1.name like ? escape ''
          * 优化完成, 这次并未查询所有字段
          */
-
         return entityManager.createQuery(cq).resultList   // 笛卡尔积, 手动转换为需要的结构
             .groupBy { it.id }
             .map { (id, group) ->
@@ -146,11 +149,67 @@ class CommonService(
             }
     }
 
-    private fun pair(): Pair<String, String> {
+    private fun genKeywordsPair(): Pair<String, String> {
         val roleNameMock = arrayOf("first", "second", "third", "").random()
         val permissionNameMock = arrayOf("", "first", "second", "third", "").random()
         println("ROLE_NAME= $roleNameMock, PERMISSION_NAME= $permissionNameMock")
         return Pair(roleNameMock, permissionNameMock)
+    }
+
+
+    /**
+     * 带有动态条件+分页的findAll()
+     * 观察生成的sql可以看出, 始终都查询了cust_user表所有字段
+     *
+     * Hibernate: select ue1_0.id,ue1_0.created_at,ue1_0.created_by,ue1_0.email,ue1_0.password,ue1_0.updated_at,ue1_0.username
+     * from cust_user ue1_0
+     * where ue1_0.username like ? escape '' and ue1_0.email like ? escape '' order by ue1_0.updated_at desc,ue1_0.id desc
+     * offset ? rows fetch first ? rows only
+     *
+     *  @see simpleSpecQueryOptimized()
+     */
+    fun simpleSpecQuery(): Page<Any>{
+        val (spec, pageable) = specification()
+        return userRepository.findAll(spec, pageable)
+            .map { SimplerUserDTO(it.id, it.username, it.email) }
+    }
+
+
+    /**
+     * 优化后只查询了需要的字段:
+     * Hibernate: select ue1_0.id,ue1_0.username,ue1_0.email
+     * from cust_user ue1_0
+     * where ue1_0.username like ? escape '' and ue1_0.email like ? escape '' order by ue1_0.updated_at desc,1 desc
+     * offset ? rows fetch first ? rows only
+     */
+    fun simpleSpecQueryOptimized(): Any {
+        val (spec, pageable) = specification()
+        return userRepository.findBy<UserEntity, Page<SimplerUserDTO>>(spec){p -> p
+            .project("id", "username", "email")  // 非必须
+            .`as`(SimplerUserDTO::class.java)                   // 投影或DTO均可
+            .page(pageable)
+        }
+    }
+
+
+    // 组装查询条件和分页参数
+    private fun specification(): Pair<Specification<UserEntity>, Pageable> {
+        val usernameOrEmpty = arrayOf("first", "second", "third", "").random()
+        val emailOrEmpty = arrayOf("example", "").random()
+        println("USERNAME= $usernameOrEmpty, EMAIL= $emailOrEmpty")
+        val spec = Specification<UserEntity> { root, _, cb ->
+            val predicates = mutableListOf<Predicate>()
+            if (usernameOrEmpty.isNotBlank()) {
+                predicates.add(cb.like(root["username"], "%$usernameOrEmpty%"))
+            }
+            if (emailOrEmpty.isNotBlank()) {
+                predicates.add(cb.like(root["email"], "%$emailOrEmpty%"))
+            }
+            cb.and(*predicates.toTypedArray())
+        }
+        val pageable = PageRequest.of(0, 10, Sort.by("updatedAt", "id").descending())
+
+        return spec to pageable
     }
 
 }
