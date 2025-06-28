@@ -59,3 +59,8 @@
                     └───specificationdemo
                             SpecificationDemoApplicationTests.kt
 ```
+
+
+## 其他
+* 如果你使用本项目默认的h2数据库, 项目运行(`./gradlew bootRun`)后你可以通过 `http://localhost:8080/h2-console` 查看其内容
+* 实际优化效果你可以通过postman等工具调用相关接口关注执行耗时进行对比
