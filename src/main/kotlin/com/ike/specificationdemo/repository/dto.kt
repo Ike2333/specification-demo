@@ -11,8 +11,8 @@ data class UserDTO(
     val password: String?,
     val createdAt: Instant?,
     val updatedAt: Instant?,
-    val roleNames: List<String>?,
-    val rolePaths: List<String>?,
+    val roleNames: List<String?>,
+    val rolePaths: List<String?>,
 )
 
 data class UserFlatDTO(
@@ -39,3 +39,5 @@ data class SimplerUserDTO(
     val username: String?,
     val email: String?,
 )
+
+data class UserRoleDTO(val username: String?, val email: String?, val roleNames: List<String>?)

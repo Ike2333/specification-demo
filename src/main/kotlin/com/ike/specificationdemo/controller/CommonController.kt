@@ -44,4 +44,10 @@ class CommonController(
     fun simpleSpecQueryOptimized(): Any{
         return commonService.simpleSpecQueryOptimized()
     }
+
+    @GetMapping("/cqwc")
+    fun findUsersByRoleAndPermission(): Any{
+        return commonService.complexQueryWithCriteria()
+    }
+
 }
