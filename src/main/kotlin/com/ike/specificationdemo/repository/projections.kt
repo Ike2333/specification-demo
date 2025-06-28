@@ -3,6 +3,7 @@ package com.ike.specificationdemo.repository
 import java.time.Instant
 
 /**
+ * 接口投影, 虽然官方曾经推荐, 但在后续版本中可能会被更直接的映射方式(数据类)取代
  * @author <a href=mailto://idiotpre@outlook.com>IKE</a> 28/6/2025
  */
 interface UserProjection {
