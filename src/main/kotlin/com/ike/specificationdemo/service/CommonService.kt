@@ -37,19 +37,9 @@ class CommonService(
         /*
         * Hibernate: select ue1_0.username,ue1_0.password,ue1_0.email,ue1_0.updated_at,ue1_0.created_at,ue1_0.id from cust_user ue1_0
         * 观察console可以看到hibernate生成的sql可以看出此时已经是最优解了
+        * 在3.x版本中, 接口投影已经可以被直接替换为数据类了
         */
-        return userRepository.findSimpleUserProjectionBy()
-            // 也可以像这样将返回值映射为 List<SimpleUserDTO>
-            .map {
-                SimpleUserDTO(
-                    it.getId(),
-                    it.getUsername(),
-                    it.getPassword(),
-                    it.getEmail(),
-                    it.getCreatedAt(),
-                    it.getUpdatedAt()
-                )
-            }
+        return userRepository.findSimpleUserDTOBy()
     }
 
     fun complexQuery(): Any {

@@ -14,6 +14,8 @@ interface UserRepository : JpaRepository<UserEntity, Long>, JpaSpecificationExec
      * 直接使用投影作为返回时, 命名必须是 `find{ProjectionClassName}By`, 你可以在投影中定义要select的字段的getter, 返回值必须与实体类一致
      */
     fun findSimpleUserProjectionBy(): List<SimpleUserProjection>
+    fun findSimpleUserDTOBy(): List<SimpleUserDTO>
+    fun findSimplerUserDTOBy(): List<SimplerUserDTO>
 }
 
 interface RoleRepository: JpaRepository<RoleEntity, Long>, JpaSpecificationExecutor<RoleEntity>
