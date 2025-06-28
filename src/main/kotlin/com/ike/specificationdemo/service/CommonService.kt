@@ -150,8 +150,8 @@ class CommonService(
     }
 
     private fun genKeywordsPair(): Pair<String, String> {
-        val roleNameMock = arrayOf("first", "second", "third", "").random()
-        val permissionNameMock = arrayOf("", "first", "second", "third", "").random()
+        val roleNameMock = arrayOf("first", "second", "third", "", "test").random()
+        val permissionNameMock = arrayOf("", "first", "second", "third", "", "test").random()
         println("ROLE_NAME= $roleNameMock, PERMISSION_NAME= $permissionNameMock")
         return Pair(roleNameMock, permissionNameMock)
     }
@@ -194,7 +194,7 @@ class CommonService(
 
     // 组装查询条件和分页参数
     private fun specification(): Pair<Specification<UserEntity>, Pageable> {
-        val usernameOrEmpty = arrayOf("first", "second", "third", "").random()
+        val usernameOrEmpty = arrayOf("username", "first", "second", "").random()
         val emailOrEmpty = arrayOf("example", "").random()
         println("USERNAME= $usernameOrEmpty, EMAIL= $emailOrEmpty")
         val spec = Specification<UserEntity> { root, _, cb ->

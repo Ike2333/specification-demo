@@ -29,7 +29,7 @@ class DataInitializer(
     // 写入一些模拟数据
     @Bean
     fun initSomeMockData(): CommandLineRunner = CommandLineRunner { _ ->
-        arrayOf("first", "second", "third").forEach {
+        arrayOf("zeroth", "first", "second", "third", "forth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleven", "twelfth").forEach {
             PermissionEntity().apply {
                 this.name = "test_permission_${it}"
                 this.path = "test::${it}"
