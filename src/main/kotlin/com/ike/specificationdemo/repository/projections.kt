@@ -26,3 +26,23 @@ interface SimpleUserProjection {
     fun getCreatedAt(): Instant?
     fun getId(): Long?
 }
+
+interface SimplerUserProj{
+    fun getId(): Long?
+    fun getUsername(): String?
+    fun getEmail(): String?
+}
+
+interface UserEntityInfo {
+    val id: Long?
+    val username: String?
+    val password: String?
+    val email: String?
+    val roles: List<RoleEntityInfo>
+
+    interface RoleEntityInfo {
+        val id: Long?
+        val name: String?
+        val path: String?
+    }
+}

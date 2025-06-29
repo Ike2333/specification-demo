@@ -7,9 +7,12 @@ import com.ike.specificationdemo.repository.*
 import jakarta.persistence.EntityManager
 import jakarta.persistence.criteria.JoinType
 import jakarta.persistence.criteria.Predicate
+import jakarta.persistence.criteria.Root
+import jakarta.persistence.criteria.Subquery
 import org.springframework.data.domain.*
 import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 
 /**
@@ -81,65 +84,6 @@ class CommonService(
         }
     }
 
-    fun complexQueryOptimized(): Any {
-        /*
-         * 假设这次需要根据传入的角色名和权限名动态查询关联的用户
-         */
-        val (roleNameMock, permissionNameMock) = genKeywordsPair()
-
-        val cb = entityManager.criteriaBuilder
-        val cq = cb.createQuery(UserFlatDTO::class.java)
-        val root = cq.from(UserEntity::class.java)
-        val userRoleJoin = root.join<UserEntity, RoleEntity>("roles", JoinType.LEFT)
-        val rolePermissionJoin = userRoleJoin.join<RoleEntity, PermissionEntity>("permissions", JoinType.LEFT)
-        cq.select(
-            cb.construct(
-                UserFlatDTO::class.java,
-                root.get<Long>("id"),
-                root.get<String>("username"),
-                root.get<String>("password"),
-                root.get<Instant>("createdAt"),
-                root.get<Instant>("updatedAt"),
-                userRoleJoin.get<String>("name"),
-                userRoleJoin.get<String>("path")
-            )
-        )
-        val predicates = mutableListOf<Predicate>()
-        if (roleNameMock.isNotBlank()) {
-            predicates.add(cb.like(userRoleJoin.get("name"), "%$roleNameMock%"))
-        }
-        if (permissionNameMock.isNotBlank()) {
-            predicates.add(cb.like(rolePermissionJoin.get("name"), "%$permissionNameMock%"))
-        }
-        cq.where(*predicates.toTypedArray())
-
-
-        /*
-         * Hibernate: select ue1_0.id,ue1_0.username,ue1_0.password,ue1_0.created_at,ue1_0.updated_at,r1_1.name,r1_1.path
-         * from cust_user ue1_0
-         * left join cust_user_role r1_0 on ue1_0.id=r1_0.user_id
-         * left join cust_role r1_1 on r1_1.id=r1_0.role_id
-         * left join cust_role_permission p1_0 on r1_1.id=p1_0.cust_role_id
-         * left join cust_permission p1_1 on p1_1.id=p1_0.cust_permission_id
-         * where r1_1.name like ? escape '' and p1_1.name like ? escape ''
-         * 优化完成, 这次并未查询所有字段
-         */
-        return entityManager.createQuery(cq).resultList   // 笛卡尔积, 手动转换为需要的结构
-            .groupBy { it.id }
-            .map { (id, group) ->
-                val first = group.first()
-                UserDTO(
-                    id,
-                    first.username,
-                    first.password,
-                    first.createdAt,
-                    first.updatedAt,
-                    group.mapNotNull { it.roleName }.distinct(),
-                    group.mapNotNull { it.rolePath }.distinct()
-                )
-            }
-    }
-
 
     private fun genKeywordsPair(): Pair<String, String> {
         val roleNameMock = arrayOf("first", "second", "third", "", "test", "").random()
@@ -206,90 +150,198 @@ class CommonService(
     }
 
 
+
+
+    // 根据角色名称模糊匹配用户
+    fun hasRoleWithFuzzyRoleName(inputRoleName: String): Specification<UserEntity> =
+        Specification<UserEntity> { root, _, cb ->
+            val urj = root.join<UserEntity, RoleEntity>("roles")
+            cb.like(urj["name"], "%$inputRoleName%")
+        }
+
+    // 根据权限名称模糊匹配用户
+    fun hasPermissionWithFuzzyPermissionName(inputPermissionName: String): Specification<UserEntity> =
+        Specification<UserEntity> { root, _, cb ->
+            val urj = root.join<UserEntity, RoleEntity>("roles")
+            val rpj = urj.join<RoleEntity, PermissionEntity>("permissions")
+            cb.like(rpj["name"], "%$inputPermissionName%")
+        }
+
+
     /**
-     * 多对多对多动态条件复杂查询时, 为保证性能, 需要分多次查询, 纯criteria风格实现
+     * 这是一个反面示例
+     * 这样可以查询出数据, 通过观察控制台hibernate输出的sql可以看到是N+1查询
      */
-    fun complexQueryWithCriteria(): Page<UserRoleDTO> {
+    @Transactional
+    fun findByRoleAndPermissionName(): Any {
+        val roleName = "first"
+        val permissionName = "first"
+        val pageable = PageRequest.of(0, 5)
 
-        val (roleName, permissionName) = genKeywordsPair()
-        val pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"))
+        println("$roleName---------$permissionName")
 
-        val cb = entityManager.criteriaBuilder
-        // 查询符合条件的用户 ID
-        val idQuery = cb.createQuery(Long::class.java)
-        val idRoot = idQuery.from(UserEntity::class.java)
-
-        val roleJoin = idRoot.join<UserEntity, RoleEntity>("roles", JoinType.LEFT)
-        val predicates = mutableListOf<Predicate>()
-
-        if (roleName.isNotBlank()) {
-            predicates += cb.like(roleJoin["name"], "%$roleName%")
-        }
-
-        if (permissionName.isNotBlank()) {
-            val permissionJoin = roleJoin.join<RoleEntity, PermissionEntity>("permissions", JoinType.LEFT)
-            predicates += cb.like(permissionJoin["name"], "%$permissionName%")
-        }
-
-        idQuery.select(idRoot.get("id")).distinct(true).where(*predicates.toTypedArray())
-
-        // 排序处理(排序字段存在 root 上)
-        val orders = pageable.sort.map {
-            when (it.direction) {
-                Sort.Direction.ASC -> cb.asc(idRoot.get<Any>(it.property))
-                Sort.Direction.DESC -> cb.desc(idRoot.get<Any>(it.property))
+        val spec = Specification<UserEntity> { root, query, cb ->
+            val urj = root.join<UserEntity, RoleEntity>("roles", JoinType.LEFT)
+            val rpj = urj.join<RoleEntity, PermissionEntity>("permissions", JoinType.LEFT)
+            val predicates = mutableListOf<Predicate>()
+            if (roleName.isNotBlank()) {
+                predicates.add(cb.like(urj["name"], "%$roleName%"))
             }
-        }.toList()
-        idQuery.orderBy(orders)
+            if (permissionName.isNotBlank()) {
+                predicates.add(cb.like(rpj["name"], "%$permissionName%"))
+            }
 
-        val idResultQuery = entityManager.createQuery(idQuery)
-        idResultQuery.firstResult = pageable.offset.toInt()
-        idResultQuery.maxResults = pageable.pageSize
-        val userIds = idResultQuery.resultList
-
-        if (userIds.isEmpty()) {
-            return PageImpl(emptyList(), pageable, 0)
+            cb.and(*predicates.toTypedArray())
         }
 
-        // 根据 ID 加载用户及其roles(fetch roles)
-        val userQuery = cb.createQuery(UserEntity::class.java)
-        val userRoot = userQuery.from(UserEntity::class.java)
-        userRoot.fetch<UserEntity, RoleEntity>("roles", JoinType.LEFT)
+        return userRepository.findAll(spec, pageable).map {
+            it.roles?.let { it1 ->
+                UserDTO(
+                    it.id,
+                    it.username,
+                    it.password,
+                    it.createdAt,
+                    it.updatedAt,
+                    it1.map { x -> x.name }.toSet(),
+                    it1.map { x -> x.path }.toSet()
+                )
+            }
+        }
+    }
 
-        userQuery.select(userRoot).distinct(true)
-            .where(userRoot.get<Long>("id").`in`(userIds))
+    /**
+     * 这并不是最佳的推荐的查询方式, 但是写起来相对简单且 *看似合理* 的方式,
+     * 在数据量大时将会出现严重性能问题(hibernate会尝试再内存中进行分页):
+     * HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory
+     * 如需确保性能(criteria api优化后的版本), 请参考下面的方法
+     * @see findByRoleAndPermissionNameOptimized
+     */
+    fun findByRoleAndPermissionNameUsingProjection(): Any {
+        val roleName = arrayOf("second", "first", "").random()
+        val permissionName = arrayOf("second", "first", "").random()
 
-        val users = entityManager.createQuery(userQuery).resultList
+        println("$roleName---------$permissionName")
+        val pageable = PageRequest.of(0, 5)
+        val spec = Specification.allOf(
+            hasRoleWithFuzzyRoleName(roleName),
+            hasPermissionWithFuzzyPermissionName(permissionName)
+        )
 
-        // 转换为 DTO
-        val dtos = users.map { user ->
-            UserRoleDTO(
-                username = user.username,
-                email = user.email,
-                roleNames = user.roles?.mapNotNull { it.name } ?: emptyList()
+        // 被投影的对象如果只包含User实体中的属性, 一般是合理且没有性能问题的; 但如果包含了映射的对象属性, hibernate将会select *
+        return userRepository.findBy<UserEntity, Page<UserEntityInfo>>(spec) {
+            it.project(
+                "id",
+                "username",
+                "password",
+                "createdAt",
+                "updatedAt",
+                "roles.name",
+                "roles.path",
             )
+                .`as`(UserEntityInfo::class.java)
+                .page(pageable)
         }
-
-        // 统计总数(可复用第一次的 count query)
-        val countQuery = cb.createQuery(Long::class.java)
-        val countRoot = countQuery.from(UserEntity::class.java)
-        val countRoleJoin = countRoot.join<UserEntity, RoleEntity>("roles", JoinType.LEFT)
-        val countPermissionJoin = countRoleJoin.join<RoleEntity, PermissionEntity>("permissions", JoinType.LEFT)
-
-        val countPredicates = mutableListOf<Predicate>()
-        if (roleName.isNotBlank()) {
-            countPredicates += cb.like(countRoleJoin["name"], "%$roleName%")
-        }
-        if (permissionName.isNotBlank()) {
-            countPredicates += cb.like(countPermissionJoin["name"], "%$permissionName%")
-        }
-
-        countQuery.select(cb.countDistinct(countRoot)).where(*countPredicates.toTypedArray())
-        val total = entityManager.createQuery(countQuery).singleResult
-
-        return PageImpl(dtos, pageable, total)
     }
 
 
+    /**
+     * 这种情况可以使用criteria api进行优化
+     * 唯一的缺点是代码冗长
+     * 可以是用QueryDSL简化这个流程, 但是需要引入额外的依赖和复杂度, 如果业务对性能要求不是很高, 用这个方法就能够简单实现相同的功能
+     * @see findByRoleAndPermissionName
+     */
+    @Transactional
+    fun findByRoleAndPermissionNameOptimized(): Page<UserDTO> {
+        val roleNameQuery = "first"
+        val permissionNameQuery = "first"
+        val pageable = PageRequest.of(0, 5)
 
+        println("$roleNameQuery---------$permissionNameQuery")
+
+        val cb = entityManager.criteriaBuilder
+        // 此子查询将识别结果应包含哪些用户
+        val userIdsSubquery: Subquery<Long> = cb.createQuery(UserEntity::class.java).subquery(Long::class.java)
+        val subqueryRoot: Root<UserEntity> = userIdsSubquery.from(UserEntity::class.java)
+        // 使用内连接查询具有角色和符合条件的权限的用户
+        val subqueryUserRoleJoin = subqueryRoot.join<UserEntity, RoleEntity>("roles", JoinType.INNER)
+        val subqueryRolePermissionJoin =
+            subqueryUserRoleJoin.join<RoleEntity, PermissionEntity>("permissions", JoinType.INNER)
+
+        val subqueryPredicates = mutableListOf<Predicate>()
+        if (roleNameQuery.isNotBlank()) {
+            subqueryPredicates.add(cb.like(subqueryUserRoleJoin.get("name"), "%$roleNameQuery%"))
+        }
+        if (permissionNameQuery.isNotBlank()) {
+            subqueryPredicates.add(cb.like(subqueryRolePermissionJoin.get("name"), "%$permissionNameQuery%"))
+        }
+
+        userIdsSubquery.select(subqueryRoot.get("id")).where(*subqueryPredicates.toTypedArray()).distinct(true)
+
+
+        // 针对即将查询的用户, 获取其角色和权限进行过滤
+        val mainQuery = cb.createQuery(UserFlatDTO::class.java)
+        val mainRoot = mainQuery.from(UserEntity::class.java)
+        val mainUserRoleJoin = mainRoot.join<UserEntity, RoleEntity>("roles", JoinType.LEFT)
+
+        mainQuery.select(
+            cb.construct(
+                UserFlatDTO::class.java,
+                mainRoot.get<Long>("id"),
+                mainRoot.get<String>("username"),
+                mainRoot.get<String>("password"),
+                mainRoot.get<Instant>("createdAt"),
+                mainRoot.get<Instant>("updatedAt"),
+                mainUserRoleJoin.get<String>("name"),
+                mainUserRoleJoin.get<String>("path"),
+            )
+        )
+
+        // 使用子查询中的ID过滤主查询
+        mainQuery.where(mainRoot.get<Long>("id").`in`(userIdsSubquery))
+
+        // 针对主查询实体(UserEntity)排序
+        if (pageable.sort.isSorted) {
+            val orders = pageable.sort.map { order ->
+                if (order.isAscending) cb.asc(mainRoot.get<Long>("id")) else cb.desc(mainRoot.get<Long>("id"))
+            }.toList()
+            mainQuery.orderBy(orders)
+        }
+
+        // UserFlatDTO分页查询
+        val flatTypedQuery = entityManager.createQuery(mainQuery)
+        flatTypedQuery.firstResult = pageable.offset.toInt()
+        flatTypedQuery.maxResults = pageable.pageSize
+
+        val flatResults: List<UserFlatDTO> = flatTypedQuery.resultList
+
+        // 将UserFlatDTO聚合为userDTO
+        val userDtos = flatResults
+            .groupBy { it.id } // 以user id分组
+            .map { (userId, group) ->
+                val firstFlatDto = group.first()
+                UserDTO(
+                    userId,
+                    firstFlatDto.username,
+                    firstFlatDto.password,
+                    firstFlatDto.createdAt,
+                    firstFlatDto.updatedAt,
+                    group.mapNotNull { it.roleName }.toSet(),
+                    group.mapNotNull { it.rolePath }.toSet()
+                )
+            }
+
+        // 获取命中查询条件的总用户数
+        val countCq = cb.createQuery(Long::class.java)
+        val countRoot = countCq.from(UserEntity::class.java)
+        countCq.select(cb.countDistinct(countRoot.get<Long>("id")))
+        countCq.where(countRoot.get<Long>("id").`in`(userIdsSubquery))
+        val totalElements = entityManager.createQuery(countCq).singleResult
+
+
+        return PageImpl(userDtos, pageable, totalElements)
+    }
 }
+
+
+
+

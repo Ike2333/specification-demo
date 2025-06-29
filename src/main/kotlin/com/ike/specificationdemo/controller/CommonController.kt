@@ -30,10 +30,6 @@ class CommonController(
     }
 
 
-    @GetMapping("/cqo")
-    fun complexQueryOpt(): Any{
-        return commonService.complexQueryOptimized()
-    }
 
     @GetMapping("/ssq")
     fun simpleSpecQuery(): Any{
@@ -45,9 +41,21 @@ class CommonController(
         return commonService.simpleSpecQueryOptimized()
     }
 
-    @GetMapping("/cqwc")
-    fun findUsersByRoleAndPermission(): Any{
-        return commonService.complexQueryWithCriteria()
+
+    @GetMapping("/fbrap")
+    fun findByRoleAndPermissionName(): Any{
+        return commonService.findByRoleAndPermissionName()
+    }
+
+    @GetMapping("/fbrapp")
+    fun findByRoleAndPermissionNameUsingProjection(): Any{
+        return commonService.findByRoleAndPermissionNameUsingProjection()
+    }
+
+    @GetMapping("/fbrapo")
+    fun findByRoleAndPermissionNameOptimized(): Any{
+        return commonService.findByRoleAndPermissionNameOptimized()
+
     }
 
 }
