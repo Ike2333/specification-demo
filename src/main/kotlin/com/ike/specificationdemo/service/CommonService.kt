@@ -250,7 +250,6 @@ class CommonService(
      * 可以是用QueryDSL简化这个流程, 但是需要引入额外的依赖和复杂度, 如果业务对性能要求不是很高, 用这个方法就能够简单实现相同的功能
      * @see findByRoleAndPermissionName
      */
-    @Transactional
     fun findByRoleAndPermissionNameOptimized(): Page<UserDTO> {
         val roleNameQuery = "first"
         val permissionNameQuery = "first"
@@ -336,7 +335,6 @@ class CommonService(
         countCq.select(cb.countDistinct(countRoot.get<Long>("id")))
         countCq.where(countRoot.get<Long>("id").`in`(userIdsSubquery))
         val totalElements = entityManager.createQuery(countCq).singleResult
-
 
         return PageImpl(userDtos, pageable, totalElements)
     }
